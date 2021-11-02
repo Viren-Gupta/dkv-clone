@@ -110,13 +110,6 @@ func memoryUsageHandler(store storage.KVStore) http.HandlerFunc {
 	}
 }
 
-func triggerMemoryCleanup() http.HandlerFunc {
-	return func(writer http.ResponseWriter, request *http.Request) {
-		debug.FreeOSMemory()
-		writer.WriteHeader(http.StatusOK)
-	}
-}
-
 func main() {
 
 	//load config
@@ -132,7 +125,6 @@ func main() {
 
 	kvs, cp, ca, br := newKVStore()
 	http.Handle("/mem/usage", memoryUsageHandler(kvs))
-	http.Handle("/mem/cleanup", triggerMemoryCleanup())
 	grpcSrvr, lstnr := newGrpcServerListener()
 	defer grpcSrvr.GracefulStop()
 	srvrRole := toDKVSrvrRole(config.DbRole)
@@ -371,10 +363,6 @@ func setupStats() {
 	statsStreamer = stats.NewStatStreamer()
 	statAggregatorRegistry = aggregate.NewStatAggregatorRegistry()
 	go statsStreamer.Run()
-}
-
-func memoryUsage(w http.ResponseWriter, r *http.Request) {
-
 }
 
 func newKVStore() (storage.KVStore, storage.ChangePropagator, storage.ChangeApplier, storage.Backupable) {
