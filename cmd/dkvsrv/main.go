@@ -12,6 +12,7 @@ import (
 	"os"
 	"os/signal"
 	"path"
+	"runtime/debug"
 	"strings"
 	"syscall"
 
@@ -94,6 +95,28 @@ func initializeFlags() {
 	flag.BoolVarP(&pprofEnable, "pprof", "p", false, "Enable pprof profiling")
 }
 
+func memoryUsageHandler(store storage.KVStore) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		usage, err := store.GetMemoryUsage()
+		if err != nil {
+			w.WriteHeader(http.StatusInternalServerError)
+			e, _ := json.Marshal(err.Error())
+			w.Write(e)
+		} else {
+			w.WriteHeader(http.StatusOK)
+			e, _ := json.Marshal(usage)
+			w.Write(e)
+		}
+	}
+}
+
+func triggerMemoryCleanup() http.HandlerFunc {
+	return func(writer http.ResponseWriter, request *http.Request) {
+		debug.FreeOSMemory()
+		writer.WriteHeader(http.StatusOK)
+	}
+}
+
 func main() {
 
 	//load config
@@ -108,6 +131,8 @@ func main() {
 	go setupHttpServer()
 
 	kvs, cp, ca, br := newKVStore()
+	http.Handle("/mem/usage", memoryUsageHandler(kvs))
+	http.Handle("/mem/cleanup", triggerMemoryCleanup())
 	grpcSrvr, lstnr := newGrpcServerListener()
 	defer grpcSrvr.GracefulStop()
 	srvrRole := toDKVSrvrRole(config.DbRole)
@@ -348,6 +373,10 @@ func setupStats() {
 	go statsStreamer.Run()
 }
 
+func memoryUsage(w http.ResponseWriter, r *http.Request) {
+
+}
+
 func newKVStore() (storage.KVStore, storage.ChangePropagator, storage.ChangeApplier, storage.Backupable) {
 	slg := dkvLogger.Sugar()
 	defer slg.Sync()
@@ -377,6 +406,7 @@ func newKVStore() (storage.KVStore, storage.ChangePropagator, storage.ChangeAppl
 		if err != nil {
 			dkvLogger.Panic("RocksDB engine init failed", zap.Error(err))
 		}
+
 		return rocksDb, rocksDb, rocksDb, rocksDb
 	case "badger":
 		var badgerDb badger.DB
