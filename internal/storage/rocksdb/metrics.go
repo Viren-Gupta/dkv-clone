@@ -1,11 +1,11 @@
 package rocksdb
 
 import (
-	"log"
 	"time"
 
 	"github.com/flipkart-incubator/gorocksdb"
 	"github.com/prometheus/client_golang/prometheus"
+	"go.uber.org/zap"
 )
 
 // metricsCollector collects rocksdB metrics.
@@ -49,11 +49,12 @@ func (rdb *rocksDB) metricsCollector() {
 	for {
 		select {
 		case <-rdb.closed:
+			rdb.opts.lgr.Info("Shutting down rocksdb memory monitor...")
 			return
 		case <-ticker.C:
 			memoryUsage, err := gorocksdb.GetApproximateMemoryUsageByType([]*gorocksdb.DB{rdb.db}, nil)
 			if err != nil {
-				log.Printf("Error getting rocksdb memory usage: %v \n", err)
+				rdb.opts.lgr.Error("Error getting rocksdb memory usage", zap.Error(err))
 			} else {
 				cacheTotalGauge.Set(float64(memoryUsage.CacheTotal))
 				memTableTotalGauge.Set(float64(memoryUsage.MemTableTotal))
