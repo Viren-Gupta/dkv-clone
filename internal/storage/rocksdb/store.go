@@ -47,6 +47,7 @@ type rocksDB struct {
 	// Indicates a global mutation like backup and restore that
 	// require exclusivity. Shall be manipulated using atomics.
 	globalMutation uint32
+	closed         chan bool
 }
 
 type rocksDBOpts struct {
@@ -238,7 +239,10 @@ func openStore(opts *rocksDBOpts) (*rocksDB, error) {
 		opts:           opts,
 		globalMutation: 0,
 		stat:           storage.NewStat(opts.promRegistry, "rocksdb"),
+		closed:         make(chan bool, 1),
 	}
+	go rocksdb.metricsCollector()
+
 	//TODO: revisit this later after understanding what is the impact of manually triggered compaction
 	//go rocksdb.Compaction()
 	return &rocksdb, nil
@@ -254,17 +258,19 @@ func (rdb *rocksDB) Compaction() error {
 	tick := time.Tick(15 * time.Minute)
 	for {
 		select {
+		case <-rdb.closed:
+			return nil
 		case <-tick:
 			// trigger a compaction
 			rdb.opts.lgr.Info("Triggering RocksDB Compaction")
 			rdb.db.CompactRangeCF(rdb.ttlCF, gorocksdb.Range{nil, nil})
 		}
 	}
-	return nil
 }
 
 func (rdb *rocksDB) Close() error {
 	rdb.optimTrxnDB.Close()
+	rdb.closed <- true
 	//rdb.opts.destroy()
 	return nil
 }
@@ -973,8 +979,4 @@ func exists(path string) (bool, error) {
 		return false, nil
 	}
 	return false, err
-}
-
-func (rdb *rocksDB) GetMemoryUsage() (storage.MemoryUsage, error) {
-	return gorocksdb.GetApproximateMemoryUsageByType([]*gorocksdb.DB{rdb.db}, nil)
 }

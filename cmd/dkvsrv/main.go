@@ -12,7 +12,6 @@ import (
 	"os"
 	"os/signal"
 	"path"
-	"runtime/debug"
 	"strings"
 	"syscall"
 
@@ -95,21 +94,6 @@ func initializeFlags() {
 	flag.BoolVarP(&pprofEnable, "pprof", "p", false, "Enable pprof profiling")
 }
 
-func memoryUsageHandler(store storage.KVStore) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		usage, err := store.GetMemoryUsage()
-		if err != nil {
-			w.WriteHeader(http.StatusInternalServerError)
-			e, _ := json.Marshal(err.Error())
-			w.Write(e)
-		} else {
-			w.WriteHeader(http.StatusOK)
-			e, _ := json.Marshal(usage)
-			w.Write(e)
-		}
-	}
-}
-
 func main() {
 
 	//load config
@@ -124,7 +108,6 @@ func main() {
 	go setupHttpServer()
 
 	kvs, cp, ca, br := newKVStore()
-	http.Handle("/mem/usage", memoryUsageHandler(kvs))
 	grpcSrvr, lstnr := newGrpcServerListener()
 	defer grpcSrvr.GracefulStop()
 	srvrRole := toDKVSrvrRole(config.DbRole)
